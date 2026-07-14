@@ -32,14 +32,10 @@ button.ghost{background:rgba(255,255,255,.16);color:#fff}
 button:disabled{opacity:.5;cursor:not-allowed}
 .filterbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px;font-size:13px}
 .filterbar .fl{color:#dbe4f0;font-weight:600}
-.filterbar .sep{color:rgba(255,255,255,.4);margin:0 4px}
 #yearBtns{display:inline-flex;gap:5px;flex-wrap:wrap}
 .filterbar button{background:rgba(255,255,255,.16);color:#fff;padding:3px 12px;border-radius:14px;font-size:13px;font-weight:600}
 .filterbar button:hover{background:rgba(255,255,255,.28)}
 .filterbar button.active{background:#ffd966;color:#5b4300}
-.filterbar button.overdue.active{background:#f59e0b;color:#3b2500}
-.filterbar input[type=month]{padding:3px 6px;border:none;border-radius:6px;font:inherit}
-#rangeInputs[hidden]{display:none}
 #statusBar{min-height:20px;font-size:13px;margin-top:6px;color:#ffe9a8}
 main{padding:12px 16px 60px}
 .viewtabs{display:flex;gap:6px;margin-bottom:10px}
@@ -172,7 +168,7 @@ fieldset legend{font-size:13px;font-weight:700;color:var(--brand);padding:0 6px}
 </head>
 <body>
 <header>
-  <h1>專案獎金算薪系統 <span class="sub">☁ 雲端版 c5 ・ 年份/發放日篩選 ・ 粉紅=待發 藍=已發 ・ 月份N=N+1月5號發 ・ 多人共用</span></h1>
+  <h1>專案獎金算薪系統 <span class="sub">☁ 雲端版 c6 ・ 年份篩選 ・ 發放日可用搜尋框查(打115/7) ・ 粉紅=待發 藍=已發 ・ 多人共用</span></h1>
   <div class="toolbar">
     <label>目前月份 <input type="month" id="monthPicker"></label>
     <button class="primary" id="btnNew">➕ 新增專案</button>
@@ -188,16 +184,7 @@ fieldset legend{font-size:13px;font-weight:700;color:var(--brand);padding:0 6px}
   <div class="filterbar">
     <span class="fl">案件年份:</span>
     <span id="yearBtns"></span>
-    <span class="sep">｜</span>
-    <span class="fl">獎金發放日:</span>
-    <button class="paybtn" data-pay="本季">本季</button>
-    <button class="paybtn" data-pay="今年">今年</button>
-    <button class="paybtn" data-pay="區間">區間</button>
-    <button class="paybtn overdue" data-pay="過期" title="發放日已過、但還沒標記已發的獎金">⚠ 過期未發</button>
-    <span id="rangeInputs" hidden>
-      <input type="month" id="payFrom" title="發放日起"> ~ <input type="month" id="payTo" title="發放日訖">
-    </span>
-    <label style="color:#dbe4f0;margin-left:6px"><input type="checkbox" id="showClosed"> 顯示已結案</label>
+    <label style="color:#dbe4f0;margin-left:10px"><input type="checkbox" id="showClosed"> 顯示已結案</label>
   </div>
   <div id="statusBar"></div>
 </header>
@@ -453,7 +440,7 @@ const state = {
   _editingRowIdx: -1,
   view: 'list',
   sort: { col: '月份', dir: 'desc' },
-  filters: { year: '', payMode: '', payFrom: '', payTo: '' },
+  filters: { year: '' },
   allowed: false,
 };
 
@@ -484,26 +471,6 @@ function rocToIso(roc){
   return m ? `${+m[1] + 1911}-${String(+m[2]).padStart(2,'0')}-${String(+m[3]).padStart(2,'0')}` : '';
 }
 function currentYm(){ return $('#monthPicker').value || new Date().toISOString().slice(0,7); }
-// 民國「年/月」→ 可比較數值（年*12+月）；西元 yyyy-mm 同理
-function rocYmToNum(roc){
-  const m = /^(\d{2,3})\/(\d{1,2})$/.exec(String(roc || '').trim());
-  return m ? (+m[1]) * 12 + (+m[2]) : null;
-}
-function gYmToRocNum(ym){
-  const m = /^(\d{4})-(\d{2})$/.exec(String(ym || ''));
-  return m ? (+m[1] - 1911) * 12 + (+m[2]) : null;
-}
-function nowRoc(){ const d = new Date(); return { y: d.getFullYear() - 1911, m: d.getMonth() + 1 }; }
-// 一列所有「實際有金額的獎金」的發放（發放日數值 + 是否已發）
-function payoutsOf(r){
-  const out = [];
-  PAY_MAP.forEach(([amtCol, dateCol]) => {
-    const amt = HR_BONUS.num(r[amtCol]);
-    if (!amt) return;
-    out.push({ num: rocYmToNum(r[dateCol]), paid: String(r[STATUS_OF[amtCol]] || '') === '已發' });
-  });
-  return out;
-}
 const normName = s => String(s || '').replace(/\s+/g, '');
 function findRowByName(name){
   const k = normName(name);
@@ -796,9 +763,6 @@ function renderFilterBar(){
   };
   cont.append(mk('', '全部'));
   [...years].sort().reverse().forEach(y => cont.append(mk(y, y)));
-  document.querySelectorAll('.filterbar button.paybtn').forEach(b =>
-    b.classList.toggle('active', state.filters.payMode === b.dataset.pay));
-  $('#rangeInputs').hidden = state.filters.payMode !== '區間';
 }
 function displayHeaders(){
   const extras = EXTRA.filter(h => !h.endsWith('狀態'));
@@ -822,29 +786,6 @@ function rowMatchesFilters(r){
   if (person && !(String(r['設計師']).includes(person) || String(r['助理']).includes(person))) return false;
   // 案件年份（依「月份」西元年）
   if (state.filters.year && String(r['月份'] || '').slice(0, 4) !== state.filters.year) return false;
-  // 發放日快選：任一「有金額的獎金」發放日落在選定範圍
-  const pm = state.filters.payMode;
-  if (pm){
-    const ps = payoutsOf(r);
-    const nr = nowRoc();
-    const now = nr.y * 12 + nr.m;
-    let ok = false;
-    if (pm === '過期'){
-      ok = ps.some(p => p.num !== null && p.num < now && !p.paid);   // 發放日已過、未標記已發
-    } else {
-      let lo, hi;
-      if (pm === '今年'){ lo = nr.y * 12 + 1; hi = nr.y * 12 + 12; }
-      else if (pm === '本季'){ const qs = Math.floor((nr.m - 1) / 3) * 3 + 1; lo = nr.y * 12 + qs; hi = lo + 2; }
-      else { // 區間
-        lo = gYmToRocNum(state.filters.payFrom); hi = gYmToRocNum(state.filters.payTo);
-        if (lo === null) lo = -Infinity;
-        if (hi === null) hi = Infinity;
-        if (lo > hi){ const t = lo; lo = hi; hi = t; }
-      }
-      ok = ps.some(p => p.num !== null && p.num >= lo && p.num <= hi);
-    }
-    if (!ok) return false;
-  }
   return true;
 }
 function sortKey(r, col){
@@ -1456,13 +1397,6 @@ function init(){
   $('#searchBox').addEventListener('input', renderTable);
   $('#showClosed').addEventListener('change', renderTable);
   $('#designerFilter').addEventListener('change', renderTable);
-  document.querySelectorAll('.filterbar button.paybtn').forEach(b =>
-    b.addEventListener('click', () => {
-      state.filters.payMode = (state.filters.payMode === b.dataset.pay) ? '' : b.dataset.pay;
-      renderFilterBar(); renderTable();
-    }));
-  $('#payFrom').addEventListener('change', () => { state.filters.payFrom = $('#payFrom').value; if (state.filters.payMode === '區間') renderTable(); });
-  $('#payTo').addEventListener('change', () => { state.filters.payTo = $('#payTo').value; if (state.filters.payMode === '區間') renderTable(); });
   renderFilterBar();
   $('#monthPicker').addEventListener('change', () => {
     buildPayDateOptions();
