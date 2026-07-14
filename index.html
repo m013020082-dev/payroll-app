@@ -1,0 +1,1391 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>專案獎金算薪系統（雲端版）</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<style>
+:root{
+  --bg:#f4f6f9; --panel:#ffffff; --ink:#1f2937; --muted:#6b7280;
+  --brand:#305496; --brand-dk:#24406f; --line:#e5e7eb; --accent:#0e9f6e;
+  --warn:#d97706; --danger:#dc2626;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);
+  font:14px/1.5 "Microsoft JhengHei","PingFang TC","Noto Sans TC",sans-serif}
+header{background:var(--brand);color:#fff;padding:10px 16px;position:sticky;top:0;z-index:30;
+  box-shadow:0 2px 6px rgba(0,0,0,.15)}
+header h1{margin:0 0 8px;font-size:18px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+header h1 .sub{font-size:12px;font-weight:normal;opacity:.75}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.toolbar label{font-size:13px;display:flex;align-items:center;gap:4px}
+.toolbar input[type=month],.toolbar input[type=search],.toolbar select{
+  padding:5px 8px;border:none;border-radius:6px;font:inherit}
+.toolbar input[type=search]{min-width:200px}
+button{font:inherit;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;
+  background:#fff;color:var(--brand);font-weight:600}
+button:hover{filter:brightness(.94)}
+button.primary{background:#ffd966;color:#5b4300}
+button.ghost{background:rgba(255,255,255,.16);color:#fff}
+button:disabled{opacity:.5;cursor:not-allowed}
+#statusBar{min-height:20px;font-size:13px;margin-top:6px;color:#ffe9a8}
+main{padding:12px 16px 60px}
+.viewtabs{display:flex;gap:6px;margin-bottom:10px}
+.viewtabs button{background:#dde4ee;color:var(--brand-dk)}
+.viewtabs button.active{background:var(--brand);color:#fff}
+.counts{font-size:13px;color:var(--muted);margin:0 0 8px}
+#tableWrap{overflow:auto;background:var(--panel);border:1px solid var(--line);
+  border-radius:8px;max-height:calc(100vh - 210px)}
+table{border-collapse:separate;border-spacing:0;width:max-content;font-size:13px}
+thead th{position:sticky;top:0;background:var(--brand);color:#fff;padding:6px 8px;
+  font-weight:600;white-space:nowrap;z-index:5;border-right:1px solid rgba(255,255,255,.15);
+  cursor:pointer;user-select:none}
+thead th:hover{background:var(--brand-dk)}
+thead th.actions{cursor:default}
+thead th .arrow{font-size:10px;opacity:.9;margin-left:2px}
+tbody td{padding:5px 8px;border-bottom:1px solid var(--line);border-right:1px solid #f1f3f6;
+  white-space:nowrap;background:var(--panel)}
+tbody tr:hover td{background:#eef4ff}
+tbody tr.closed td{color:#9ca3af}
+td.name,th.name{position:sticky;left:0;z-index:6;max-width:320px;overflow:hidden;
+  text-overflow:ellipsis;box-shadow:2px 0 0 var(--line)}
+th.name{z-index:7}
+td.name{background:#fbfcfe;font-weight:600}
+tbody tr:hover td.name{background:#eef4ff}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+td.total{font-weight:700}
+tbody td.pend{background:#ffe0f3}
+tbody td.paid{background:#d7e9fb}
+tbody tr:hover td.pend{background:#ffcdeb}
+tbody tr:hover td.paid{background:#c3ddf7}
+.legend{display:inline-flex;gap:14px;align-items:center;margin-left:12px}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:4px;vertical-align:-1px}
+.legend .lp{background:#ffb8e2}.legend .lb{background:#9ec9f0}
+td.note{max-width:260px;overflow:hidden;text-overflow:ellipsis;color:var(--muted)}
+td.actions button{padding:2px 8px;font-size:12px;background:#fee2e2;color:var(--danger)}
+.tag{display:inline-block;border-radius:4px;padding:0 6px;font-size:12px}
+.tag.A{background:#dbeafe;color:#1d4ed8}.tag.B{background:#dcfce7;color:#15803d}
+.tag.C{background:#fef3c7;color:#b45309}
+.tag.yes{background:#ecfdf5;color:#059669}
+/* modal */
+#modalMask{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:50;
+  display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:24px 12px}
+#modalMask[hidden]{display:none}
+#projectModal{background:#fff;border-radius:12px;max-width:1080px;width:100%;
+  box-shadow:0 20px 60px rgba(0,0,0,.3)}
+#projectModal .mhead{display:flex;justify-content:space-between;align-items:center;
+  padding:14px 20px;border-bottom:1px solid var(--line)}
+#projectModal .mhead h2{margin:0;font-size:17px}
+#projectModal .mhead .warn{font-size:12px;color:var(--warn);margin-top:2px}
+#projectModal .mclose{background:none;font-size:20px;color:var(--muted);padding:2px 8px}
+#projectModal form{padding:16px 20px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px 14px}
+.field{display:flex;flex-direction:column;gap:3px;font-size:13px}
+.field>span{color:var(--muted)}
+.field input,.field select,.field textarea{padding:6px 8px;border:1px solid #cbd5e1;
+  border-radius:6px;font:inherit;background:#fff}
+.field input:focus,.field select:focus{outline:2px solid #93b4e8;border-color:var(--brand)}
+.checkrow{display:flex;flex-wrap:wrap;gap:16px;margin:12px 0;font-size:13px;align-items:center}
+.checkrow label{display:flex;align-items:center;gap:6px;cursor:pointer}
+fieldset{border:1px solid var(--line);border-radius:8px;margin:12px 0;padding:10px 14px}
+fieldset legend{font-size:13px;font-weight:700;color:var(--brand);padding:0 6px}
+#preview{background:#f0f5ff;border:1px solid #c8d8f5;border-radius:8px;padding:10px 14px;margin:12px 0}
+#preview table{width:100%;font-size:13px}
+#preview td{padding:2px 10px 2px 0;border:none;background:none;white-space:nowrap}
+#preview td.v{text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
+#preview .big{font-size:15px;color:var(--brand-dk)}
+.mfoot{display:flex;justify-content:flex-end;gap:10px;padding:0 20px 18px}
+.mfoot button.save{background:var(--brand);color:#fff;padding:8px 22px}
+.mfoot button.cancel{background:#e5e7eb;color:var(--ink)}
+/* login */
+#loginMask{position:fixed;inset:0;background:rgba(15,23,42,.72);z-index:80;
+  display:flex;align-items:center;justify-content:center}
+#loginMask[hidden]{display:none}
+#loginBox{background:#fff;border-radius:14px;padding:28px 34px;max-width:420px;width:92%;
+  box-shadow:0 24px 70px rgba(0,0,0,.4);text-align:center}
+#loginBox h2{margin:0 0 6px;font-size:20px;color:var(--brand-dk)}
+#loginBox p{font-size:13px;color:var(--muted);margin:0 0 16px}
+#loginBox input{width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:8px;
+  font:inherit;font-size:16px;text-align:center;margin-bottom:12px}
+#loginBox button{background:var(--brand);color:#fff;width:100%;padding:10px;font-size:15px}
+#loginBox .err{color:var(--danger);font-size:13px;min-height:18px;margin-bottom:6px}
+#loginBox .ok{color:var(--accent);font-size:13px;min-height:18px;margin-bottom:6px}
+#loginBox .linkish{background:none;color:var(--brand);width:auto;padding:6px 4px;font-size:13px;text-decoration:underline;display:block;margin:4px auto 0}
+/* admin (allowlist) modal */
+#adminMask{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:70;
+  display:flex;align-items:center;justify-content:center}
+#adminMask[hidden]{display:none}
+#adminBox{background:#fff;border-radius:14px;padding:22px 28px;max-width:460px;width:92%;
+  box-shadow:0 24px 70px rgba(0,0,0,.4)}
+#adminBox h2{margin:0 0 4px;font-size:17px;color:var(--brand-dk)}
+#adminBox p{font-size:12px;color:var(--muted);margin:0 0 12px}
+#adminBox ul{list-style:none;margin:0 0 12px;padding:0;max-height:260px;overflow:auto}
+#adminBox li{display:flex;justify-content:space-between;align-items:center;
+  padding:6px 8px;border-bottom:1px solid var(--line);font-size:14px}
+#adminBox li button{background:#fee2e2;color:var(--danger);padding:2px 10px;font-size:12px}
+#adminBox .addcol{display:flex;flex-direction:column;gap:8px}
+#adminBox .addcol input{padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font:inherit}
+#adminBox .addcol button{background:var(--brand);color:#fff}
+#adminBox li .btns{display:flex;gap:6px}
+#adminBox li button.reset{background:#e0e7ff;color:#3730a3;padding:2px 10px;font-size:12px}
+/* log view */
+#logView,#payrollView{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px}
+#payrollView h2,#logView h2{margin:0 0 4px;font-size:16px}
+#payrollView .hint,#logView .hint{font-size:12px;color:var(--muted);margin-bottom:10px}
+#payrollView table,#logView table{width:100%;font-size:13px;margin-bottom:18px}
+#payrollView th,#logView th{background:#eef2f8;color:var(--ink);position:static;padding:6px 10px;text-align:left;cursor:default}
+#payrollView td,#logView td{padding:5px 10px;white-space:normal}
+#payrollView td.num,#payrollView th.num,#logView td.num{text-align:right}
+.pill{background:#eef2f8;border-radius:20px;padding:2px 12px;font-size:12px;color:var(--brand-dk)}
+#logView input[type=search]{padding:6px 10px;border:1px solid #cbd5e1;border-radius:6px;
+  font:inherit;min-width:260px;margin-bottom:10px}
+#logView td.diff{max-width:420px;color:var(--muted);font-size:12px}
+#logView td.t{white-space:nowrap;font-variant-numeric:tabular-nums}
+#logView .act{display:inline-block;border-radius:4px;padding:0 6px;font-size:12px;background:#eef2f8}
+#logView .act.新增{background:#dcfce7;color:#15803d}
+#logView .act.更新,#logView .act.合併{background:#dbeafe;color:#1d4ed8}
+#logView .act.刪除{background:#fee2e2;color:#b91c1c}
+#logView .act.版本復原{background:#fef3c7;color:#b45309}
+#logView .act.標記已發{background:#d7e9fb;color:#1d4ed8}
+#logView .act.標記待發{background:#ffe0f3;color:#be185d}
+#logView button.undo{padding:2px 10px;font-size:12px;background:#fef3c7;color:#92400e}
+#busy{position:fixed;inset:0;background:rgba(255,255,255,.6);z-index:90;
+  display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--brand-dk);font-weight:700}
+#busy[hidden]{display:none}
+#seedBar{background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:10px 14px;
+  margin-bottom:10px;font-size:13px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+@media print{header .toolbar,#statusBar,.viewtabs,td.actions,th.actions{display:none}}
+</style>
+</head>
+<body>
+<header>
+  <h1>專案獎金算薪系統 <span class="sub">☁ 雲端版 c3 ・ 帳號密碼登入（可自助設定密碼）・ 粉紅=待發 藍=已發 ・ 月份N=N+1月5號發 ・ 多人共用</span></h1>
+  <div class="toolbar">
+    <label>目前月份 <input type="month" id="monthPicker"></label>
+    <button class="primary" id="btnNew">➕ 新增專案</button>
+    <input type="search" id="searchBox" placeholder="搜尋案場 / 設計師 / 助理…">
+    <label style="color:#fff"><input type="checkbox" id="showClosed"> 顯示已結案</label>
+    <select id="designerFilter" title="依人員篩選"><option value="">全部人員</option></select>
+    <span style="flex:1"></span>
+    <span id="userChip" style="color:#ffd966;font-weight:700">👤 未登入</span>
+    <button class="ghost" id="btnUsers" title="建立 / 管理員工帳號密碼">👥 帳號管理</button>
+    <button class="ghost" id="btnReload" title="重新從雲端載入">🔄</button>
+    <button class="ghost" id="btnLogout">登出</button>
+    <button class="ghost" id="btnExport">💾 匯出Excel</button>
+  </div>
+  <div id="statusBar"></div>
+</header>
+<main>
+  <div id="seedBar" hidden>
+    ⚠ 雲端資料庫目前是空的。請選擇「設計師獎金-案場整合版.xlsx」做一次性初始匯入：
+    <button class="primary" id="btnSeed">📂 初始匯入 Excel</button>
+    <input type="file" id="seedFile" accept=".xlsx" hidden>
+  </div>
+  <div class="viewtabs">
+    <button id="tabList" class="active">📋 專案列表</button>
+    <button id="tabPayroll">📅 月度出帳</button>
+    <button id="tabLog">🕘 操作紀錄</button>
+  </div>
+  <p class="counts" id="countLine"></p>
+  <div id="tableWrap"><table id="grid"><thead></thead><tbody></tbody></table></div>
+  <div id="payrollView" hidden></div>
+  <div id="logView" hidden></div>
+</main>
+
+<div id="loginMask">
+  <div id="loginBox">
+    <h2>👤 登入算薪系統</h2>
+    <p id="loginHint">請輸入公司配發的帳號（Email）與密碼。</p>
+    <div class="err" id="loginErr"></div>
+    <form id="pwForm">
+      <input type="email" id="loginEmail" placeholder="帳號 Email" required autocomplete="username">
+      <input type="password" id="loginPassword" placeholder="密碼" required autocomplete="current-password">
+      <button type="submit" id="btnLogin">登入</button>
+      <button type="button" class="linkish" id="btnShowBootstrap">第一次使用 / 還沒有密碼？點此設定密碼</button>
+    </form>
+    <form id="bootstrapForm" hidden>
+      <div class="ok" id="bootOk">第一次使用：輸入你被授權的 Email，並自己設定一組密碼。</div>
+      <input type="email" id="bootEmail" placeholder="你的 Email" autocomplete="username">
+      <input type="password" id="bootPw" placeholder="設定密碼（至少 6 碼）" autocomplete="new-password">
+      <input type="password" id="bootPw2" placeholder="再輸入一次密碼" autocomplete="new-password">
+      <button type="submit" id="btnBootstrap">建立密碼並登入</button>
+      <button type="button" class="linkish" id="btnBackLogin">← 已經有密碼了，回登入</button>
+    </form>
+    <div id="blockedBox" hidden>
+      <p style="color:var(--danger);font-weight:700" id="blockedMsg"></p>
+      <button type="button" id="btnBlockedLogout">改用其他帳號</button>
+    </div>
+  </div>
+</div>
+
+<div id="adminMask" hidden>
+  <div id="adminBox">
+    <h2>👥 帳號管理</h2>
+    <p>建立員工帳號（Email＋密碼），對方即可用此帳密登入。也可重設密碼或移除帳號。</p>
+    <ul id="userList"></ul>
+    <div class="addcol">
+      <input type="email" id="newUserEmail" placeholder="員工 Email…" autocomplete="off">
+      <input type="text" id="newUserPw" placeholder="設定密碼（至少 6 碼）…" autocomplete="off">
+      <button id="btnAddUser">＋ 建立帳號</button>
+    </div>
+    <div class="err" id="adminErr" style="min-height:18px;margin-top:6px"></div>
+    <div style="text-align:right;margin-top:12px"><button id="btnCloseAdmin" style="background:#e5e7eb;color:var(--ink)">關閉</button></div>
+  </div>
+</div>
+
+<div id="modalMask" hidden>
+  <div id="projectModal">
+    <div class="mhead">
+      <div>
+        <h2 id="modalTitle">➕ 新增專案</h2>
+        <div class="warn" id="editWarn" hidden>⚠ 儲存時將依新制公式重算全部獎金（此列原為舊制歷史資料）</div>
+      </div>
+      <button class="mclose" id="btnCloseModal" type="button">✕</button>
+    </div>
+    <form id="projectForm" autocomplete="off">
+      <div class="grid2">
+        <label class="field"><span>月份 *</span><input type="month" name="month" required></label>
+        <label class="field"><span>簽約日</span><input type="date" name="signDate"></label>
+        <label class="field" style="grid-column:span 2"><span>專案名稱 *</span>
+          <input type="text" name="projectName" required placeholder="例：新北市板橋區華江一路17F"></label>
+        <label class="field"><span>設計師姓名 *</span>
+          <input type="text" name="designer" list="employeeList" required></label>
+        <label class="field"><span>助理姓名</span>
+          <input type="text" name="assistant" list="employeeList" placeholder="無助理則留空"></label>
+        <label class="field"><span>獎金制度</span>
+          <select name="scheme">
+            <option value="A">A制（113年起入職：簽約60%/結案40%）</option>
+            <option value="B">B制（113年前入職：45%/45%/保固10%）</option>
+            <option value="C">C制（自由制，金額全手動）</option>
+          </select></label>
+      </div>
+      <div class="checkrow">
+        <label id="referralWrap"><input type="checkbox" name="referralFee"> 有介紹費（簽約獎金率 4.6% → 5.6%）</label>
+        <label><input type="checkbox" name="payOnClosing"> 結案發（簽約獎金延到結案一起發）</label>
+        <label><input type="checkbox" name="isClosed"> 已結案</label>
+      </div>
+
+      <fieldset id="amountInputs">
+        <legend>金額輸入（A/B 制）</legend>
+        <div class="grid2">
+          <label class="field"><span>設計費金額1（未稅）</span><input type="number" name="designFee1" min="0" step="any"></label>
+          <label class="field"><span>設計費金額2（未稅）</span><input type="number" name="designFee2" min="0" step="any"></label>
+          <label class="field"><span>簽約金額1（未稅）</span><input type="number" name="signingAmount1" min="0" step="any"></label>
+          <label class="field"><span>簽約金額2（未稅）</span><input type="number" name="signingAmount2" min="0" step="any"></label>
+          <label class="field"><span>簽約金額3（未稅）</span><input type="number" name="signingAmount3" min="0" step="any"></label>
+          <label class="field"><span>結案金額</span><input type="number" name="closingAmount" min="0" step="any"></label>
+          <label class="field"><span>利潤率（%）例：35</span><input type="number" name="profitRate" step="0.01"></label>
+          <label class="field"><span>窗簾額外獎金（直接加總）</span><input type="number" name="curtainBonus" step="any"></label>
+        </div>
+      </fieldset>
+
+      <fieldset id="cSchemeInputs" hidden>
+        <legend>C 制手動獎金（直接輸入金額）</legend>
+        <div class="grid2">
+          <label class="field"><span>設計費獎金1</span><input type="number" name="manualDesign1" step="any"></label>
+          <label class="field"><span>設計費獎金2</span><input type="number" name="manualDesign2" step="any"></label>
+          <label class="field"><span>簽約獎金</span><input type="number" name="manualSigning" step="any"></label>
+          <label class="field"><span>結案獎金</span><input type="number" name="manualClosing" step="any"></label>
+          <label class="field"><span>保固獎金</span><input type="number" name="manualWarranty" step="any"></label>
+          <label class="field"><span>助理獎金</span><input type="number" name="manualAssistant" step="any"></label>
+          <label class="field"><span>窗簾額外獎金</span><input type="number" name="manualCurtain" step="any"></label>
+        </div>
+      </fieldset>
+
+      <div id="preview"></div>
+
+      <fieldset>
+        <legend>發放日（民國 年/月；「未定」＝尚未排入出帳）</legend>
+        <div class="grid2">
+          <label class="field"><span>設計獎金1</span><select name="payDateDesign1" class="paydate"></select></label>
+          <label class="field"><span>設計獎金2</span><select name="payDateDesign2" class="paydate"></select></label>
+          <label class="field"><span>簽約獎金1</span><select name="payDateSigning1" class="paydate"></select></label>
+          <label class="field"><span>簽約獎金2</span><select name="payDateSigning2" class="paydate"></select></label>
+          <label class="field"><span>簽約獎金3</span><select name="payDateSigning3" class="paydate"></select></label>
+          <label class="field"><span>結案獎金</span><select name="payDateClosing" class="paydate"></select></label>
+          <label class="field"><span>保固獎金</span><select name="payDateWarranty" class="paydate"></select></label>
+          <label class="field"><span>助理獎金</span><select name="payDateAssistant" class="paydate"></select></label>
+        </div>
+      </fieldset>
+
+      <label class="field"><span>備註</span><textarea name="note" rows="2"></textarea></label>
+
+      <div class="mfoot" style="padding:14px 0 4px">
+        <button type="button" class="cancel" id="btnCancelModal">取消</button>
+        <button type="submit" class="save">💾 儲存</button>
+      </div>
+    </form>
+  </div>
+</div>
+<datalist id="employeeList"></datalist>
+<div id="busy" hidden>☁ 處理中…</div>
+
+<script>
+'use strict';
+/* ========= Supabase ========= */
+const SUPABASE_URL = 'https://tbiniwgenrkjimzpaamc.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRiaW5pd2dlbnJramltenBhYW1jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk4NTIzMDksImV4cCI6MjA5NTQyODMwOX0.vPjFcYmLLXeBZRD9UoJH28tNwGaxRTruwNMZoMY1CI8';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const T_PROJECTS = 'designer_bonus_projects';
+const T_LOG = 'designer_bonus_audit_log';
+const T_USERS = 'designer_bonus_allowed_users';
+
+/* =========================================================
+ * 獎金計算核心（依「新增專案-完整邏輯規格.md」§3）
+ * ========================================================= */
+const HR_BONUS = (() => {
+  function num(v){
+    if (v === null || v === undefined) return 0;
+    const s = String(v).replace(/[^0-9.\-]/g, '');
+    const n = parseFloat(s);
+    return isNaN(n) ? 0 : n;
+  }
+  function normProfit(v){
+    let p = num(v);
+    if (p > 1) p = p / 100;
+    return p || 0;
+  }
+  function calcAll(o){
+    const scheme = o.scheme || 'A';
+    const hasReferralFee = !!o.hasReferralFee && scheme !== 'C';
+    const payOnClosing = !!o.payOnClosing;
+    const signingRate = hasReferralFee ? 0.056 : 0.046;
+    const profit = normProfit(o.profitRate);
+    const assistantRate = profit < 0.28 ? 0.03 : (profit < 0.32 ? 0.04 : 0.05);
+
+    if (scheme === 'C'){
+      const design1 = Math.round(num(o.manualDesign1));
+      const design2 = Math.round(num(o.manualDesign2));
+      const s1 = Math.round(num(o.manualSigning));
+      const closingBase = Math.round(num(o.manualClosing));
+      const warranty = Math.round(num(o.manualWarranty));
+      const assistant = Math.round(num(o.manualAssistant));
+      const curtain = Math.round(num(o.manualCurtain));
+      const signing = payOnClosing ? 0 : s1;
+      const closing = payOnClosing ? closingBase + s1 : closingBase;
+      const designerTotal = design1 + design2 + signing + closing + warranty + curtain;
+      return { scheme, hasReferralFee, payOnClosing, signingRate, assistantRate,
+        design1, design2, design: design1 + design2,
+        signing1: signing, signing2: 0, signing3: 0, signing,
+        closing, warranty, assistant, curtain,
+        designerTotal, total: designerTotal + assistant };
+    }
+
+    const design1 = Math.round(num(o.designFee1) * 0.20);
+    const design2 = Math.round(num(o.designFee2) * 0.20);
+    const portionSign = scheme === 'A' ? 0.60 : 0.45;
+    const s1 = Math.round(num(o.signingAmount1) * signingRate * portionSign);
+    const s2 = Math.round(num(o.signingAmount2) * signingRate * portionSign);
+    const s3 = Math.round(num(o.signingAmount3) * signingRate * portionSign);
+    const signingSum = s1 + s2 + s3;
+    const closingAmount = num(o.closingAmount);
+    const assistant = (o.hasAssistant && profit > 0)
+      ? Math.round(closingAmount * profit * assistantRate) : 0;
+    const portionClose = scheme === 'A' ? 1.00 : 0.90;
+    const adjust = closingAmount * (profit - 0.30) * 0.20;
+    const closingBase = Math.round(closingAmount * signingRate * portionClose - signingSum - assistant + adjust);
+    const warranty = scheme === 'B'
+      ? Math.round((num(o.signingAmount1) + num(o.signingAmount2) + num(o.signingAmount3)) * signingRate * 0.10)
+      : 0;
+    const curtain = Math.round(num(o.curtainBonus));
+    const signing = payOnClosing ? 0 : signingSum;
+    const closing = payOnClosing ? closingBase + signingSum : closingBase;
+    const designerTotal = design1 + design2 + signing + closing + warranty + curtain;
+    return { scheme, hasReferralFee, payOnClosing, signingRate, assistantRate,
+      design1, design2, design: design1 + design2,
+      signing1: payOnClosing ? 0 : s1, signing2: payOnClosing ? 0 : s2, signing3: payOnClosing ? 0 : s3,
+      signing, closing, warranty, assistant, curtain,
+      designerTotal, total: designerTotal + assistant };
+  }
+  return { calcAll, num };
+})();
+
+/* ========= 資料結構 ========= */
+const SCHEMA = ['月份','簽約日','專案名稱','設計師','助理','制度','介紹費','結案發','已結案','保固類型',
+ '設計費金額1','設計費金額2','簽約金額1','簽約金額2','簽約金額3','結案金額','利潤率(%)',
+ '設計費獎金1','設計獎金1發放日','設計費獎金2','設計獎金2發放日',
+ '簽約獎金1','簽約獎金1發放日','簽約獎金2','簽約獎金2發放日','簽約獎金3','簽約獎金3發放日',
+ '結案獎金','結案獎金發放日','保固獎金','保固獎金發放日','窗簾額外獎金',
+ '助理獎金','助理獎金發放日','設計師合計','獎金總計','備註'];
+const EXTRA = ['設計獎金1狀態','設計獎金2狀態','簽約獎金1狀態','簽約獎金2狀態','簽約獎金3狀態',
+ '結案獎金狀態','保固獎金狀態','助理獎金狀態','組別','資料來源'];
+const NUM_FIELDS = ['設計費金額1','設計費金額2','簽約金額1','簽約金額2','簽約金額3','結案金額','利潤率(%)',
+ '設計費獎金1','設計費獎金2','簽約獎金1','簽約獎金2','簽約獎金3','結案獎金','保固獎金',
+ '窗簾額外獎金','助理獎金','設計師合計','獎金總計'];
+const DATE_FIELDS = ['設計獎金1發放日','設計獎金2發放日','簽約獎金1發放日','簽約獎金2發放日',
+ '簽約獎金3發放日','結案獎金發放日','保固獎金發放日','助理獎金發放日'];
+const STATUS_OF = {
+ '設計費獎金1':'設計獎金1狀態','設計費獎金2':'設計獎金2狀態',
+ '簽約獎金1':'簽約獎金1狀態','簽約獎金2':'簽約獎金2狀態','簽約獎金3':'簽約獎金3狀態',
+ '結案獎金':'結案獎金狀態','保固獎金':'保固獎金狀態','助理獎金':'助理獎金狀態'};
+
+const state = {
+  headers: [...SCHEMA, ...EXTRA],
+  rows: [],            // {_id, ...data}
+  log: [],             // DB rows: {id,t,user_email,action,project,diff,total_before,total_after,before}
+  user: '',
+  _editingRowIdx: -1,
+  view: 'list',
+  sort: { col: '月份', dir: 'desc' },
+  allowed: false,
+};
+
+/* ========= 小工具 ========= */
+const $ = sel => document.querySelector(sel);
+const fmt = n => (n === '' || n === null || n === undefined || isNaN(Number(n))) ? '' : Number(n).toLocaleString('zh-TW');
+function setStatus(msg){
+  const el = $('#statusBar');
+  el.textContent = msg;
+  clearTimeout(setStatus._t);
+  setStatus._t = setTimeout(() => { el.textContent = ''; }, 6000);
+}
+function busy(on){ $('#busy').hidden = !on; }
+function ymToRoc(ym){
+  const m = /^(\d{4})-(\d{2})$/.exec(ym || '');
+  return m ? `${+m[1] - 1911}/${+m[2]}` : (ym || '');
+}
+function rocToYm(roc){
+  const m = /^(\d{2,3})\/(\d{1,2})$/.exec(String(roc || '').trim());
+  return m ? `${+m[1] + 1911}-${String(+m[2]).padStart(2,'0')}` : '';
+}
+function isoToRoc(iso){
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || '');
+  return m ? `${+m[1] - 1911}/${+m[2]}/${+m[3]}` : '';
+}
+function rocToIso(roc){
+  const m = /^(\d{2,3})\/(\d{1,2})\/(\d{1,2})/.exec(String(roc || '').trim());
+  return m ? `${+m[1] + 1911}-${String(+m[2]).padStart(2,'0')}-${String(+m[3]).padStart(2,'0')}` : '';
+}
+function currentYm(){ return $('#monthPicker').value || new Date().toISOString().slice(0,7); }
+const normName = s => String(s || '').replace(/\s+/g, '');
+function findRowByName(name){
+  const k = normName(name);
+  if (!k) return -1;
+  return state.rows.findIndex(r => normName(r['專案名稱']) === k);
+}
+function rowData(r){
+  const o = {};
+  state.headers.forEach(h => o[h] = r[h] ?? '');
+  return o;
+}
+function dbErr(e){
+  console.error(e);
+  alert('雲端操作失敗：' + (e.message || JSON.stringify(e)));
+}
+
+/* ========= 操作紀錄 ========= */
+function diffRows(before, after){
+  if (!before) return '（新資料）';
+  if (!after) return '（整列刪除）';
+  const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
+  keys.delete('_id');
+  const parts = [];
+  keys.forEach(k => {
+    const a = before[k] ?? '', b = after[k] ?? '';
+    if (String(a) !== String(b)) parts.push(`${k}: ${a === '' ? '(空)' : a} → ${b === '' ? '(空)' : b}`);
+  });
+  return parts.length ? parts.join('；') : '（無欄位變更）';
+}
+async function logAction(action, project, before, after){
+  const b = before ? rowData(before) : null;
+  const a = after ? rowData(after) : null;
+  const entry = {
+    user_email: state.user,
+    action, project: project || '',
+    diff: (b || a) ? diffRows(b, a) : '',
+    total_before: b && b['獎金總計'] !== '' ? Number(b['獎金總計']) : null,
+    total_after: a && a['獎金總計'] !== '' ? Number(a['獎金總計']) : null,
+    before: b,
+  };
+  const { data, error } = await sb.from(T_LOG).insert(entry).select().single();
+  if (error){ console.warn('紀錄寫入失敗', error); return; }
+  state.log.unshift(data);
+  if (state.view === 'log') renderLog();
+}
+
+/* ========= 登入（帳號密碼） ========= */
+function showLoginStep(step){
+  $('#pwForm').hidden = step !== 'login';
+  $('#bootstrapForm').hidden = step !== 'bootstrap';
+  $('#blockedBox').hidden = step !== 'blocked';
+  $('#loginHint').style.display = (step === 'login') ? '' : 'none';
+  $('#loginErr').textContent = '';
+}
+async function doLogin(ev){
+  ev.preventDefault();
+  const email = $('#loginEmail').value.trim().toLowerCase();
+  const password = $('#loginPassword').value;
+  if (!email || !password) return;
+  $('#btnLogin').disabled = true;
+  $('#loginErr').textContent = '';
+  const { error } = await sb.auth.signInWithPassword({ email, password });
+  $('#btnLogin').disabled = false;
+  if (error){
+    $('#loginErr').textContent = '登入失敗：帳號或密碼錯誤';
+    return;
+  }
+  // onAuthStateChange 會接手（載入資料）
+}
+async function doBootstrap(ev){
+  ev.preventDefault();
+  const email = $('#bootEmail').value.trim().toLowerCase();
+  const pw = $('#bootPw').value;
+  const pw2 = $('#bootPw2').value;
+  $('#loginErr').textContent = '';
+  if (!/.+@.+\..+/.test(email)){ $('#loginErr').textContent = '請輸入有效的 Email'; return; }
+  if (pw.length < 6){ $('#loginErr').textContent = '密碼至少 6 碼'; return; }
+  if (pw !== pw2){ $('#loginErr').textContent = '兩次密碼不一致'; return; }
+  $('#btnBootstrap').disabled = true;
+  try{
+    const { data, error } = await sb.functions.invoke('payroll-admin', { body: { action: 'bootstrap', email, password: pw } });
+    let msg = null;
+    if (error){ try{ const j = await error.context.json(); msg = j && j.error; }catch(_){ msg = error.message; } }
+    else if (data && data.error){ msg = data.error; }
+    if (msg){ $('#loginErr').textContent = msg; $('#btnBootstrap').disabled = false; return; }
+    // 建好後直接登入
+    const { error: le } = await sb.auth.signInWithPassword({ email, password: pw });
+    $('#btnBootstrap').disabled = false;
+    if (le){ $('#loginErr').textContent = '密碼已設定，但自動登入失敗，請回上一步用密碼登入'; showLoginStep('login'); return; }
+    // onAuthStateChange 接手
+  }catch(e){
+    $('#btnBootstrap').disabled = false;
+    $('#loginErr').textContent = '設定失敗：' + (e.message || e);
+  }
+}
+async function checkAllowedAndEnter(session){
+  state.user = session.user.email || '';
+  $('#userChip').textContent = '👤 ' + state.user;
+  const { data, error } = await sb.from(T_USERS).select('email').limit(1);
+  if (error){ dbErr(error); return; }
+  if (!data || !data.length){
+    state.allowed = false;
+    $('#blockedMsg').textContent = `${state.user} 不在可登入名單中。請聯絡管理員將你的 Email 加入名單後再試。`;
+    showLoginStep('blocked');
+    $('#loginMask').hidden = false;
+    return;
+  }
+  state.allowed = true;
+  $('#loginMask').hidden = true;
+  await logAction('登入', '', null, null);
+  await loadAll();
+  setStatus(`👤 ${state.user} 已登入`);
+}
+
+/* ========= 雲端資料 ========= */
+async function loadAll(){
+  busy(true);
+  try{
+    const [{ data: rows, error: e1 }, { data: log, error: e2 }] = await Promise.all([
+      sb.from(T_PROJECTS).select('id,name,data').order('name').limit(2000),
+      sb.from(T_LOG).select('*').order('id', { ascending: false }).limit(1000),
+    ]);
+    if (e1) throw e1;
+    if (e2) throw e2;
+    state.rows = (rows || []).map(r => ({ _id: r.id, ...r.data }));
+    state.log = log || [];
+    $('#seedBar').hidden = state.rows.length > 0;
+    refreshEmployeeList();
+    renderTable();
+    if (state.view === 'payroll') renderPayroll();
+    if (state.view === 'log') renderLog();
+    setStatus(`☁ 已載入 ${state.rows.length} 筆案場、${state.log.length} 筆操作紀錄`);
+  }catch(e){ dbErr(e); }
+  finally{ busy(false); }
+}
+async function dbUpsertRow(row, isNew){
+  const payload = { name: row['專案名稱'], data: rowData(row),
+    updated_at: new Date().toISOString(), updated_by: state.user };
+  if (isNew){
+    const { data, error } = await sb.from(T_PROJECTS).insert(payload).select('id').single();
+    if (error) throw error;
+    row._id = data.id;
+  } else {
+    const { error } = await sb.from(T_PROJECTS).update(payload).eq('id', row._id);
+    if (error) throw error;
+  }
+}
+
+/* ========= 初始匯入（僅資料庫為空時顯示） ========= */
+async function seedFromFile(file){
+  busy(true);
+  try{
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array' });
+    if (!wb.SheetNames.includes('專案獎金')){
+      alert('找不到「專案獎金」工作表，請選擇「設計師獎金-案場整合版.xlsx」'); return;
+    }
+    const raw = XLSX.utils.sheet_to_json(wb.Sheets['專案獎金'], { defval: '' });
+    if (!raw.length || !('專案名稱' in raw[0])){ alert('缺少「專案名稱」欄位'); return; }
+    if (!confirm(`將匯入 ${raw.length} 筆案場到雲端資料庫，確定？`)) return;
+    const payloads = raw.map(r => {
+      const o = {}; state.headers.forEach(h => o[h] = r[h] ?? '');
+      return { name: String(o['專案名稱']), data: o, updated_by: state.user };
+    });
+    for (let i = 0; i < payloads.length; i += 100){
+      const { error } = await sb.from(T_PROJECTS).insert(payloads.slice(i, i + 100));
+      if (error) throw error;
+      setStatus(`匯入中… ${Math.min(i + 100, payloads.length)}/${payloads.length}`);
+    }
+    await sb.from(T_LOG).insert({ user_email: state.user, action: '初始匯入',
+      project: `${payloads.length} 筆案場（${file.name}）`, diff: '', before: null });
+    await loadAll();
+    setStatus(`✅ 初始匯入完成：${payloads.length} 筆案場`);
+  }catch(e){ dbErr(e); }
+  finally{ busy(false); }
+}
+
+/* ========= 帳號管理（透過 payroll-admin 安全函式，service role 建帳號） ========= */
+async function adminCall(action, payload){
+  const { data, error } = await sb.functions.invoke('payroll-admin', { body: { action, ...payload } });
+  if (error){
+    let msg = error.message;
+    try{ const j = await error.context.json(); if (j && j.error) msg = j.error; }catch(_){}
+    throw new Error(msg);
+  }
+  if (data && data.error) throw new Error(data.error);
+  return data;
+}
+async function renderUsers(){
+  const { data, error } = await sb.from(T_USERS).select('*').order('added_at');
+  if (error){ dbErr(error); return; }
+  const ul = $('#userList');
+  ul.innerHTML = '';
+  (data || []).forEach(u => {
+    const self = u.email.toLowerCase() === state.user.toLowerCase();
+    const li = document.createElement('li');
+    const span = document.createElement('span');
+    span.textContent = u.email + (self ? '（你）' : '');
+    const btns = document.createElement('div');
+    btns.className = 'btns';
+    const reset = document.createElement('button');
+    reset.className = 'reset'; reset.textContent = '重設密碼';
+    reset.addEventListener('click', () => resetPassword(u.email));
+    const del = document.createElement('button');
+    del.textContent = '移除';
+    del.addEventListener('click', () => deleteAccount(u.email, self));
+    btns.append(reset, del);
+    li.append(span, btns);
+    ul.append(li);
+  });
+}
+async function createAccount(){
+  const email = $('#newUserEmail').value.trim().toLowerCase();
+  const pw = $('#newUserPw').value;
+  $('#adminErr').textContent = '';
+  if (!/.+@.+\..+/.test(email)){ $('#adminErr').textContent = '請輸入有效的 email'; return; }
+  if (pw.length < 6){ $('#adminErr').textContent = '密碼至少 6 碼'; return; }
+  busy(true);
+  try{
+    await adminCall('create', { email, password: pw });
+    await logAction('建立帳號', email, null, null);
+    $('#newUserEmail').value = ''; $('#newUserPw').value = '';
+    await renderUsers();
+    setStatus(`已建立帳號 ${email}（可把 Email 與密碼交給該員工登入）`);
+  }catch(e){ $('#adminErr').textContent = '建立失敗：' + e.message; }
+  finally{ busy(false); }
+}
+async function resetPassword(email){
+  const pw = prompt(`為 ${email} 設定新密碼（至少 6 碼）：`);
+  if (pw === null) return;
+  if (pw.length < 6){ alert('密碼至少 6 碼'); return; }
+  busy(true);
+  try{
+    await adminCall('reset', { email, password: pw });
+    await logAction('重設密碼', email, null, null);
+    setStatus(`已重設 ${email} 的密碼`);
+  }catch(e){ dbErr(e); }
+  finally{ busy(false); }
+}
+async function deleteAccount(email, self){
+  if (!confirm(`移除帳號 ${email}？此帳號將無法再登入。${self ? '\n⚠ 這是你自己的帳號，移除後你將立刻失去存取權！' : ''}`)) return;
+  busy(true);
+  try{
+    await adminCall('delete', { email });
+    await logAction('移除帳號', email, null, null);
+    await renderUsers();
+    setStatus(`已移除帳號 ${email}`);
+  }catch(e){ dbErr(e); }
+  finally{ busy(false); }
+}
+
+/* =========================================================
+ * 表格渲染（同單機版 v5）
+ * ========================================================= */
+function refreshEmployeeList(){
+  const names = new Set();
+  state.rows.forEach(r => {
+    ['設計師','助理'].forEach(f => {
+      String(r[f] || '').split(/->|[\/\\、,，+＋]/).forEach(t => {
+        t = t.replace(/\(.*?\)|（.*?）/g, '').trim();
+        if (t && t.length <= 10 && !/[0-9]/.test(t)) names.add(t);
+      });
+    });
+  });
+  const dl = $('#employeeList');
+  dl.innerHTML = '';
+  [...names].sort((a,b)=>a.localeCompare(b,'zh-Hant')).forEach(n => dl.append(new Option('', n)));
+  const df = $('#designerFilter');
+  const keep = df.value;
+  df.innerHTML = '<option value="">全部人員</option>';
+  [...names].sort((a,b)=>a.localeCompare(b,'zh-Hant')).forEach(n => df.add(new Option(n, n)));
+  df.value = keep || '';
+}
+function displayHeaders(){
+  const extras = EXTRA.filter(h => !h.endsWith('狀態'));
+  return ['專案名稱','設計師','助理','月份','制度','介紹費','結案發','已結案',
+    '簽約日','設計費金額1','設計費金額2','簽約金額1','簽約金額2','簽約金額3','結案金額','利潤率(%)',
+    '設計費獎金1','設計獎金1發放日','設計費獎金2','設計獎金2發放日',
+    '簽約獎金1','簽約獎金1發放日','簽約獎金2','簽約獎金2發放日','簽約獎金3','簽約獎金3發放日',
+    '結案獎金','結案獎金發放日','保固獎金','保固獎金發放日','窗簾額外獎金',
+    '助理獎金','助理獎金發放日','設計師合計','獎金總計','保固類型','備註', ...extras];
+}
+function rowMatchesFilters(r){
+  if (!$('#showClosed').checked && r['已結案'] === '是') return false;
+  const q = $('#searchBox').value.trim().toLowerCase();
+  if (q && !(String(r['專案名稱']).toLowerCase().includes(q)
+          || String(r['設計師']).toLowerCase().includes(q)
+          || String(r['助理']).toLowerCase().includes(q)
+          || String(r['備註']||'').toLowerCase().includes(q))) return false;
+  const person = $('#designerFilter').value;
+  if (person && !(String(r['設計師']).includes(person) || String(r['助理']).includes(person))) return false;
+  return true;
+}
+function sortKey(r, col){
+  if (col === '月份'){
+    const v = /^\d{4}-\d{2}$/.test(r[col]) ? r[col] : rocToYm(r[col]);
+    return v || null;
+  }
+  if (col === '簽約日' || DATE_FIELDS.includes(col)){
+    const m = /^(\d{2,3})\/(\d{1,2})(?:\/(\d{1,2}))?/.exec(String(r[col] || '').trim());
+    return m ? (+m[1]) * 10000 + (+m[2]) * 100 + (+(m[3] || 1)) : null;
+  }
+  if (NUM_FIELDS.includes(col)){
+    const v = r[col];
+    return (v === '' || v === null || v === undefined) ? null : HR_BONUS.num(v);
+  }
+  const s = String(r[col] ?? '').trim();
+  return s || null;
+}
+function sortRowIdxs(){
+  const { col, dir } = state.sort;
+  const idxs = state.rows.map((_, i) => i);
+  idxs.sort((a, b) => {
+    const ka = sortKey(state.rows[a], col), kb = sortKey(state.rows[b], col);
+    if (ka === null && kb === null) return a - b;
+    if (ka === null) return 1;
+    if (kb === null) return -1;
+    let c = (typeof ka === 'number' && typeof kb === 'number')
+      ? ka - kb : String(ka).localeCompare(String(kb), 'zh-Hant');
+    if (dir === 'desc') c = -c;
+    return c || a - b;
+  });
+  return idxs;
+}
+function renderTable(){
+  const heads = displayHeaders();
+  const thead = $('#grid thead');
+  const tbody = $('#grid tbody');
+  thead.innerHTML = '';
+  const trh = document.createElement('tr');
+  heads.forEach(h => {
+    const th = document.createElement('th');
+    th.textContent = h;
+    if (state.sort.col === h){
+      const ar = document.createElement('span');
+      ar.className = 'arrow';
+      ar.textContent = state.sort.dir === 'asc' ? '▲' : '▼';
+      th.append(ar);
+    }
+    if (h === '專案名稱') th.className = 'name';
+    th.title = '點擊依「' + h + '」排序';
+    th.addEventListener('click', () => {
+      if (state.sort.col === h){
+        state.sort.dir = state.sort.dir === 'asc' ? 'desc' : 'asc';
+      } else {
+        const numeric = NUM_FIELDS.includes(h) || h === '月份' || h === '簽約日' || DATE_FIELDS.includes(h);
+        state.sort = { col: h, dir: numeric ? 'desc' : 'asc' };
+      }
+      renderTable();
+    });
+    trh.append(th);
+  });
+  const thAct = document.createElement('th'); thAct.textContent = ''; thAct.className='actions';
+  trh.append(thAct);
+  thead.append(trh);
+
+  const idxs = sortRowIdxs();
+  tbody.innerHTML = '';
+  let shown = 0, sumTotal = 0;
+  const frag = document.createDocumentFragment();
+  for (const i of idxs){
+    const r = state.rows[i];
+    if (!rowMatchesFilters(r)) continue;
+    shown++; sumTotal += HR_BONUS.num(r['獎金總計']);
+    const tr = document.createElement('tr');
+    tr.dataset.idx = i;
+    if (r['已結案'] === '是') tr.className = 'closed';
+    for (const h of heads){
+      const td = document.createElement('td');
+      let v = r[h];
+      if (v === undefined || v === null) v = '';
+      if (h === '專案名稱'){ td.className = 'name'; td.title = v; td.textContent = v; }
+      else if (h === '月份'){ td.textContent = ymToRoc(v); }
+      else if (h === '制度'){
+        const s = String(v).replace('制','');
+        td.innerHTML = s ? `<span class="tag ${s}">${v}</span>` : '';
+      }
+      else if (['介紹費','結案發','已結案'].includes(h)){
+        td.innerHTML = v === '是' ? '<span class="tag yes">是</span>' : '';
+      }
+      else if (NUM_FIELDS.includes(h)){
+        td.className = 'num' + (['設計師合計','獎金總計'].includes(h) ? ' total' : '');
+        td.textContent = h === '利潤率(%)' ? (v === '' ? '' : v) : fmt(v);
+        const stCol = STATUS_OF[h];
+        if (stCol && v !== ''){
+          const st = r[stCol];
+          if (st === '待發') td.classList.add('pend');
+          else if (st === '已發') td.classList.add('paid');
+        }
+      }
+      else if (h === '備註' || h === '資料來源'){ td.className = 'note'; td.title = v; td.textContent = v; }
+      else td.textContent = v;
+      tr.append(td);
+    }
+    const tdA = document.createElement('td'); tdA.className = 'actions';
+    const del = document.createElement('button'); del.textContent = '刪除'; del.title = '刪除此列';
+    del.addEventListener('click', ev => { ev.stopPropagation(); deleteRow(i); });
+    tdA.append(del);
+    tr.append(tdA);
+    tr.addEventListener('dblclick', () => openWith(state.rows[i], i));
+    frag.append(tr);
+  }
+  tbody.append(frag);
+  $('#countLine').innerHTML =
+    `顯示 <b>${shown}</b> / ${state.rows.length} 筆案場　｜　顯示列獎金總計合計 <b>${fmt(sumTotal)}</b> 元　｜　雙擊列可編輯` +
+    `<span class="legend"><span><i class="lp"></i>待發</span><span><i class="lb"></i>已發</span></span>`;
+}
+async function deleteRow(idx){
+  const r = state.rows[idx];
+  if (!confirm(`確定刪除案場「${r['專案名稱']}」？（可到「操作紀錄」按【復原】救回）`)) return;
+  busy(true);
+  try{
+    const { error } = await sb.from(T_PROJECTS).delete().eq('id', r._id);
+    if (error) throw error;
+    await logAction('刪除', r['專案名稱'], r, null);
+    state.rows.splice(idx, 1);
+    renderTable();
+    setStatus(`已刪除「${r['專案名稱']}」（可到操作紀錄復原）`);
+  }catch(e){ dbErr(e); }
+  finally{ busy(false); }
+}
+async function restoreFromLog(logId){
+  const entry = state.log.find(e => e.id === logId);
+  if (!entry || !entry.before) return;
+  const snap = { ...entry.before };
+  const pname = snap['專案名稱'] || entry.project;
+  if (!confirm(`將案場「${pname}」復原到 ${new Date(entry.t).toLocaleString('zh-TW')} 之前的版本？`)) return;
+  busy(true);
+  try{
+    const idx = findRowByName(pname);
+    if (idx >= 0){
+      const cur = state.rows[idx];
+      const restored = { _id: cur._id, ...snap };
+      await dbUpsertRow(restored, false);
+      await logAction('版本復原', pname, cur, restored);
+      state.rows[idx] = restored;
+    } else {
+      const restored = { ...snap };
+      await dbUpsertRow(restored, true);
+      await logAction('版本復原', pname, null, restored);
+      state.rows.push(restored);
+    }
+    renderTable();
+    setStatus(`已復原「${pname}」到先前版本`);
+  }catch(e){ dbErr(e); }
+  finally{ busy(false); }
+}
+
+/* ========= Modal（同單機版） ========= */
+const form = $('#projectForm');
+function buildPayDateOptions(){
+  const ym = currentYm();
+  const [gy, gm] = ym.split('-').map(Number);
+  document.querySelectorAll('select.paydate').forEach(sel => {
+    const keep = sel.value;
+    sel.innerHTML = '';
+    sel.add(new Option('未定', '未定'));
+    for (let off = -12; off <= 24; off++){
+      const d = new Date(gy, gm - 1 + off, 1);
+      const v = `${d.getFullYear() - 1911}/${d.getMonth() + 1}`;
+      sel.add(new Option(v, v));
+    }
+    if (keep && ![...sel.options].some(o => o.value === keep)) sel.add(new Option(keep, keep));
+    sel.value = keep || '未定';
+  });
+}
+function setPayDate(sel, value){
+  const v = String(value || '').trim() || '未定';
+  if (![...sel.options].some(o => o.value === v)) sel.add(new Option(v, v));
+  sel.value = v;
+}
+function schemePanels(){
+  const c = form.scheme.value === 'C';
+  $('#amountInputs').hidden = c;
+  $('#cSchemeInputs').hidden = !c;
+  $('#referralWrap').style.display = c ? 'none' : '';
+}
+function collectOpts(){
+  const f = form;
+  return {
+    designFee1: f.designFee1.value, designFee2: f.designFee2.value,
+    signingAmount1: f.signingAmount1.value, signingAmount2: f.signingAmount2.value, signingAmount3: f.signingAmount3.value,
+    closingAmount: f.closingAmount.value, profitRate: f.profitRate.value,
+    scheme: f.scheme.value, hasReferralFee: f.referralFee.checked,
+    hasAssistant: !!f.assistant.value.trim(), payOnClosing: f.payOnClosing.checked,
+    curtainBonus: f.curtainBonus.value,
+    manualDesign1: f.manualDesign1.value, manualDesign2: f.manualDesign2.value,
+    manualSigning: f.manualSigning.value, manualClosing: f.manualClosing.value,
+    manualWarranty: f.manualWarranty.value, manualAssistant: f.manualAssistant.value,
+    manualCurtain: f.manualCurtain.value,
+  };
+}
+function updatePreview(){
+  const c = HR_BONUS.calcAll(collectOpts());
+  const F = fmt;
+  $('#preview').innerHTML = `<table><tbody>
+    <tr><td>設計獎金1</td><td class="v">${F(c.design1)}</td>
+        <td>設計獎金2</td><td class="v">${F(c.design2)}</td>
+        <td>簽約獎金${c.payOnClosing ? '（結案發→0）' : ''}</td><td class="v">${F(c.signing)}</td>
+        <td>結案獎金${c.payOnClosing ? '（含簽約）' : ''}</td><td class="v">${F(c.closing)}</td></tr>
+    <tr><td>保固獎金</td><td class="v">${F(c.warranty)}</td>
+        <td>窗簾獎金</td><td class="v">${F(c.curtain)}</td>
+        <td>助理獎金</td><td class="v">${F(c.assistant)}</td>
+        <td class="big">設計師合計</td><td class="v big">${F(c.designerTotal)}</td></tr>
+    <tr><td>簽約獎金率</td><td class="v">${(c.signingRate*100).toFixed(1)}%</td>
+        <td>助理率</td><td class="v">${(c.assistantRate*100).toFixed(0)}%</td>
+        <td></td><td></td>
+        <td class="big">全部合計</td><td class="v big">${F(c.total)}</td></tr>
+  </tbody></table>`;
+}
+function openModal(){
+  form.reset();
+  form.month.value = currentYm();
+  buildPayDateOptions();
+  document.querySelectorAll('select.paydate').forEach(s => s.value = '未定');
+  refreshEmployeeList();
+  state._editingRowIdx = -1;
+  $('#modalTitle').textContent = '➕ 新增專案';
+  $('#editWarn').hidden = true;
+  schemePanels(); updatePreview();
+  const mask = $('#modalMask');
+  mask.hidden = false;
+  mask.style.display = 'flex';
+  form.projectName.focus();
+}
+function openWith(row, idx){
+  openModal();
+  state._editingRowIdx = idx;
+  $('#modalTitle').textContent = `✏ 編輯專案 — ${row['專案名稱']}`;
+  $('#editWarn').hidden = !row['資料來源'];
+  const f = form;
+  const ym = /^\d{4}-\d{2}$/.test(row['月份']) ? row['月份'] : rocToYm(row['月份']);
+  if (ym) f.month.value = ym;
+  const iso = rocToIso(row['簽約日']) || (/^\d{4}-\d{2}-\d{2}$/.test(row['簽約日']) ? row['簽約日'] : '');
+  if (iso) f.signDate.value = iso;
+  if (row['專案名稱']) f.projectName.value = row['專案名稱'];
+  if (row['設計師']) f.designer.value = row['設計師'];
+  if (row['助理']) f.assistant.value = row['助理'];
+  const s = String(row['制度'] || '').replace('制','');
+  if (['A','B','C'].includes(s)) f.scheme.value = s;
+  f.referralFee.checked = row['介紹費'] === '是';
+  f.payOnClosing.checked = row['結案發'] === '是';
+  f.isClosed.checked = row['已結案'] === '是';
+  if (s === 'C'){
+    f.manualDesign1.value = row['設計費獎金1'] || '';
+    f.manualDesign2.value = row['設計費獎金2'] || '';
+    f.manualSigning.value = row['簽約獎金1'] || '';
+    f.manualClosing.value = row['結案獎金'] || '';
+    f.manualWarranty.value = row['保固獎金'] || '';
+    f.manualAssistant.value = row['助理獎金'] || '';
+    f.manualCurtain.value = row['窗簾額外獎金'] || '';
+  } else {
+    f.designFee1.value = row['設計費金額1'] || '';
+    f.designFee2.value = row['設計費金額2'] || '';
+    f.signingAmount1.value = row['簽約金額1'] || '';
+    f.signingAmount2.value = row['簽約金額2'] || '';
+    f.signingAmount3.value = row['簽約金額3'] || '';
+    f.closingAmount.value = row['結案金額'] || '';
+    f.profitRate.value = row['利潤率(%)'] || '';
+    f.curtainBonus.value = row['窗簾額外獎金'] || '';
+  }
+  setPayDate(f.payDateDesign1, row['設計獎金1發放日']);
+  setPayDate(f.payDateDesign2, row['設計獎金2發放日']);
+  setPayDate(f.payDateSigning1, row['簽約獎金1發放日']);
+  setPayDate(f.payDateSigning2, row['簽約獎金2發放日']);
+  setPayDate(f.payDateSigning3, row['簽約獎金3發放日']);
+  setPayDate(f.payDateClosing, row['結案獎金發放日']);
+  setPayDate(f.payDateWarranty, row['保固獎金發放日']);
+  setPayDate(f.payDateAssistant, row['助理獎金發放日']);
+  f.note.value = row['備註'] || '';
+  schemePanels(); updatePreview();
+}
+function closeModal(){
+  const mask = $('#modalMask');
+  mask.hidden = true;
+  mask.style.display = 'none';
+  $('#modalTitle').textContent = '➕ 新增專案';
+  state._editingRowIdx = -1;
+}
+
+/* ========= 儲存（§8＋雲端寫入） ========= */
+async function saveProject(ev){
+  ev.preventDefault();
+  const f = form;
+  const name = f.projectName.value.trim();
+  if (!name){ f.projectName.focus(); return; }
+  const isEdit = state._editingRowIdx >= 0;
+  let targetIdx = isEdit ? state._editingRowIdx : findRowByName(name);
+  const isMerge = !isEdit && targetIdx >= 0;
+  const old = targetIdx >= 0 ? state.rows[targetIdx] : null;
+
+  const mNum = (formVal, oldVal) => {
+    if (isMerge && (formVal === '' || HR_BONUS.num(formVal) === 0)) return oldVal ?? '';
+    return formVal === '' ? '' : HR_BONUS.num(formVal);
+  };
+  const mTxt = (formVal, oldVal) => {
+    if (isMerge && !String(formVal).trim()) return oldVal ?? '';
+    return String(formVal).trim();
+  };
+  const mDate = (formVal, oldVal) => {
+    let v = String(formVal || '').trim();
+    if (isMerge && (!v || v === '未定')) v = String(oldVal || '').trim();
+    return v || '未定';
+  };
+  const mChk = (checked, oldVal) => (isMerge ? (checked || oldVal === '是') : checked) ? '是' : '';
+
+  const scheme = f.scheme.value;
+  const vals = {
+    designFee1: mNum(f.designFee1.value, old?.['設計費金額1']),
+    designFee2: mNum(f.designFee2.value, old?.['設計費金額2']),
+    signingAmount1: mNum(f.signingAmount1.value, old?.['簽約金額1']),
+    signingAmount2: mNum(f.signingAmount2.value, old?.['簽約金額2']),
+    signingAmount3: mNum(f.signingAmount3.value, old?.['簽約金額3']),
+    closingAmount: mNum(f.closingAmount.value, old?.['結案金額']),
+    profitRate: mNum(f.profitRate.value, old?.['利潤率(%)']),
+    curtainBonus: mNum(f.curtainBonus.value, old?.['窗簾額外獎金']),
+    manualDesign1: mNum(f.manualDesign1.value, old?.['設計費獎金1']),
+    manualDesign2: mNum(f.manualDesign2.value, old?.['設計費獎金2']),
+    manualSigning: mNum(f.manualSigning.value, old?.['簽約獎金1']),
+    manualClosing: mNum(f.manualClosing.value, old?.['結案獎金']),
+    manualWarranty: mNum(f.manualWarranty.value, old?.['保固獎金']),
+    manualAssistant: mNum(f.manualAssistant.value, old?.['助理獎金']),
+    manualCurtain: mNum(f.manualCurtain.value, old?.['窗簾額外獎金']),
+  };
+  const designer = mTxt(f.designer.value, old?.['設計師']);
+  const assistant = mTxt(f.assistant.value, old?.['助理']);
+  const referral = mChk(f.referralFee.checked, old?.['介紹費']);
+  const payClose = mChk(f.payOnClosing.checked, old?.['結案發']);
+
+  const calc = HR_BONUS.calcAll({
+    ...vals, scheme,
+    hasReferralFee: referral === '是',
+    hasAssistant: !!assistant,
+    payOnClosing: payClose === '是',
+  });
+
+  const isC = scheme === 'C';
+  const row = old ? { ...old } : {};
+  Object.assign(row, {
+    '月份': mTxt(f.month.value, old?.['月份']),
+    '簽約日': isoToRoc(f.signDate.value) || (isMerge ? (old?.['簽約日'] ?? '') : ''),
+    '專案名稱': name,
+    '設計師': designer,
+    '助理': assistant,
+    '制度': scheme + '制',
+    '介紹費': isC ? '' : referral,
+    '結案發': payClose,
+    '已結案': mChk(f.isClosed.checked, old?.['已結案']),
+    '保固類型': old?.['保固類型'] ?? '',
+    '設計費金額1': isC ? '' : vals.designFee1,
+    '設計費金額2': isC ? '' : vals.designFee2,
+    '簽約金額1': isC ? '' : vals.signingAmount1,
+    '簽約金額2': isC ? '' : vals.signingAmount2,
+    '簽約金額3': isC ? '' : vals.signingAmount3,
+    '結案金額': isC ? '' : vals.closingAmount,
+    '利潤率(%)': isC ? '' : vals.profitRate,
+    '設計費獎金1': calc.design1, '設計獎金1發放日': mDate(f.payDateDesign1.value, old?.['設計獎金1發放日']),
+    '設計費獎金2': calc.design2, '設計獎金2發放日': mDate(f.payDateDesign2.value, old?.['設計獎金2發放日']),
+    '簽約獎金1': calc.signing1, '簽約獎金1發放日': mDate(f.payDateSigning1.value, old?.['簽約獎金1發放日']),
+    '簽約獎金2': calc.signing2, '簽約獎金2發放日': mDate(f.payDateSigning2.value, old?.['簽約獎金2發放日']),
+    '簽約獎金3': calc.signing3, '簽約獎金3發放日': mDate(f.payDateSigning3.value, old?.['簽約獎金3發放日']),
+    '結案獎金': calc.closing, '結案獎金發放日': mDate(f.payDateClosing.value, old?.['結案獎金發放日']),
+    '保固獎金': calc.warranty, '保固獎金發放日': mDate(f.payDateWarranty.value, old?.['保固獎金發放日']),
+    '窗簾額外獎金': calc.curtain,
+    '助理獎金': calc.assistant, '助理獎金發放日': mDate(f.payDateAssistant.value, old?.['助理獎金發放日']),
+    '設計師合計': calc.designerTotal,
+    '獎金總計': calc.total,
+    '備註': mTxt(f.note.value, old?.['備註']),
+  });
+
+  busy(true);
+  try{
+    const beforeSnap = old ? { ...old } : null;
+    let action, logAct;
+    if (targetIdx >= 0){
+      await dbUpsertRow(row, false);
+      state.rows[targetIdx] = row;
+      action = isEdit ? '已更新' : '已合併同名';
+      logAct = isEdit ? '更新' : '合併';
+    } else {
+      await dbUpsertRow(row, true);
+      state.rows.push(row);
+      action = '已新增';
+      logAct = '新增';
+    }
+    await logAction(logAct, name, beforeSnap, row);
+    state._editingRowIdx = -1;
+    refreshEmployeeList();
+    showView('list');
+    renderTable();
+    closeModal();
+    setStatus(`${action}專案「${name}」(${designer}) ─ 獎金總計 ${fmt(calc.total)} 元`);
+  }catch(e){ dbErr(e); }
+  finally{ busy(false); }
+}
+
+/* ========= 月度出帳 ========= */
+const PAY_MAP = [
+  ['設計費獎金1','設計獎金1發放日','設計師','設計獎金1'],
+  ['設計費獎金2','設計獎金2發放日','設計師','設計獎金2'],
+  ['簽約獎金1','簽約獎金1發放日','設計師','簽約獎金1'],
+  ['簽約獎金2','簽約獎金2發放日','設計師','簽約獎金2'],
+  ['簽約獎金3','簽約獎金3發放日','設計師','簽約獎金3'],
+  ['結案獎金','結案獎金發放日','設計師','結案獎金'],
+  ['保固獎金','保固獎金發放日','設計師','保固獎金'],
+  ['助理獎金','助理獎金發放日','助理','助理獎金'],
+];
+async function setPayStatus(rowIdx, amtCol, newSt){
+  const r = state.rows[rowIdx];
+  if (!r) return;
+  const stCol = STATUS_OF[amtCol];
+  if (!stCol) return;
+  busy(true);
+  try{
+    const before = { ...r };
+    r[stCol] = newSt;
+    await dbUpsertRow(r, false);
+    await logAction(newSt === '已發' ? '標記已發' : '標記待發',
+      `${r['專案名稱']}（${amtCol} ${fmt(r[amtCol])}元）`, before, r);
+    renderPayroll();
+    setStatus(`「${r['專案名稱']}」${amtCol} 已標記為${newSt}`);
+  }catch(e){ dbErr(e); }
+  finally{ busy(false); }
+}
+function renderPayroll(){
+  const rocYm = ymToRoc(currentYm());
+  const buckets = new Map();
+  state.rows.forEach((r, rowIdx) => {
+    PAY_MAP.forEach(([amtCol, dateCol, personCol, label]) => {
+      if (String(r[dateCol]).trim() !== rocYm) return;
+      const amt = HR_BONUS.num(r[amtCol]);
+      if (!amt) return;
+      const person = String(r[personCol] || '').trim() || '(未填人員)';
+      if (!buckets.has(person)) buckets.set(person, { pend: 0, paid: 0, items: [] });
+      const b = buckets.get(person);
+      const st = String(r[STATUS_OF[amtCol]] || '');
+      if (st === '已發') b.paid += amt; else b.pend += amt;
+      b.items.push({ project: r['專案名稱'], label, amt, st, rowIdx, amtCol });
+    });
+  });
+  const persons = [...buckets.entries()].sort((a, b) => (b[1].pend - a[1].pend) || (b[1].paid - a[1].paid));
+  const grandPend = persons.reduce((s, [,b]) => s + b.pend, 0);
+  const grandPaid = persons.reduce((s, [,b]) => s + b.paid, 0);
+  let html = `<h2>📅 月度出帳 — 民國 ${rocYm}</h2>
+    <div class="hint">彙總所有「發放日 = ${rocYm}」的獎金（月份N＝N+1月5號發）。
+    <span class="legend"><span><i class="lp"></i>待發（含未標記）</span><span><i class="lb"></i>已發</span></span>
+    ｜共 <span class="pill">${persons.length} 人</span>
+    　<span class="pill" style="background:#ffe0f3">待發合計 ${fmt(Math.round(grandPend))} 元</span>
+    　<span class="pill" style="background:#d7e9fb">已發合計 ${fmt(Math.round(grandPaid))} 元</span></div>`;
+  if (!persons.length){
+    html += `<p style="color:var(--muted)">此月份沒有任何已排定發放的獎金。請先在專案中把「發放日」選到 ${rocYm}。</p>`;
+  } else {
+    html += `<table><thead><tr><th>人員</th><th class="num">筆數</th><th class="num">待發金額</th><th class="num">已發金額</th></tr></thead><tbody>`;
+    persons.forEach(([p, b]) => {
+      html += `<tr><td><b>${p}</b></td><td class="num">${b.items.length}</td>
+        <td class="num"><b>${b.pend ? fmt(Math.round(b.pend)) : ''}</b></td>
+        <td class="num" style="color:var(--muted)">${b.paid ? fmt(Math.round(b.paid)) : ''}</td></tr>`;
+    });
+    html += `<tr><td>合計</td><td></td><td class="num"><b>${fmt(Math.round(grandPend))}</b></td>
+      <td class="num" style="color:var(--muted)">${fmt(Math.round(grandPaid))}</td></tr></tbody></table>`;
+    html += `<h2 style="font-size:14px">明細（按【標記已發】記錄發放完成，會寫入操作紀錄）</h2>
+      <table><thead><tr><th>人員</th><th>案場</th><th>獎金項目</th><th class="num">金額</th><th>狀態</th><th></th></tr></thead><tbody>`;
+    persons.forEach(([p, b]) => {
+      b.items.forEach(it => {
+        const isPaid = it.st === '已發';
+        html += `<tr style="background:${isPaid ? '#eef5fc' : '#fff5fb'}">
+          <td>${p}</td><td>${it.project}</td><td>${it.label}</td>
+          <td class="num">${fmt(Math.round(it.amt))}</td>
+          <td>${isPaid ? '🔵 已發' : '🌸 待發'}</td>
+          <td><button class="mark" data-row="${it.rowIdx}" data-col="${it.amtCol}" data-st="${isPaid ? '待發' : '已發'}"
+            style="padding:2px 10px;font-size:12px;background:${isPaid ? '#ffe0f3' : '#d7e9fb'}">
+            ${isPaid ? '改回待發' : '標記已發'}</button></td></tr>`;
+      });
+    });
+    html += '</tbody></table>';
+  }
+  $('#payrollView').innerHTML = html;
+  $('#payrollView').querySelectorAll('button.mark').forEach(btn =>
+    btn.addEventListener('click', () => setPayStatus(+btn.dataset.row, btn.dataset.col, btn.dataset.st)));
+}
+
+/* ========= 操作紀錄檢視 ========= */
+let logFilter = '';
+function renderLog(){
+  const view = $('#logView');
+  const q = logFilter.trim().toLowerCase();
+  const entries = state.log.filter(e => !q
+    || String(e.project || '').toLowerCase().includes(q)
+    || String(e.user_email || '').toLowerCase().includes(q)
+    || String(e.action || '').toLowerCase().includes(q));
+  let html = `<h2>🕘 操作紀錄</h2>
+    <div class="hint">每一筆新增／合併／更新／刪除／標記／復原／匯出／登入都記錄在雲端（不可修改、不可刪除）。
+    對有快照的紀錄按【復原】可將該案場退回「該次操作之前」的版本。顯示最近 1000 筆。</div>
+    <input type="search" id="logSearch" placeholder="篩選：案場 / 人員 / 動作…" value="${logFilter.replace(/"/g,'&quot;')}">`;
+  if (!entries.length){
+    html += '<p style="color:var(--muted)">目前沒有符合的紀錄。</p>';
+  } else {
+    html += `<table><thead><tr><th>時間</th><th>操作人</th><th>動作</th><th>案場</th>
+      <th class="num">總計(前)</th><th class="num">總計(後)</th><th>變更內容</th><th></th></tr></thead><tbody>`;
+    entries.forEach(e => {
+      const d = String(e.diff || '');
+      const dShort = d.length > 160 ? d.slice(0, 160) + '…' : d;
+      html += `<tr>
+        <td class="t">${new Date(e.t).toLocaleString('zh-TW', { hour12: false })}</td>
+        <td><b>${e.user_email}</b></td>
+        <td><span class="act ${e.action}">${e.action}</span></td>
+        <td>${e.project || ''}</td>
+        <td class="num">${fmt(e.total_before)}</td><td class="num">${fmt(e.total_after)}</td>
+        <td class="diff" title="${d.replace(/"/g,'&quot;')}">${dShort}</td>
+        <td>${e.before ? `<button class="undo" data-log="${e.id}">復原</button>` : ''}</td>
+      </tr>`;
+    });
+    html += '</tbody></table>';
+  }
+  const hadFocus = document.activeElement && document.activeElement.id === 'logSearch';
+  view.innerHTML = html;
+  const ls = $('#logSearch');
+  ls.addEventListener('input', ev => { logFilter = ev.target.value; renderLog(); });
+  if (hadFocus){ ls.focus(); ls.setSelectionRange(ls.value.length, ls.value.length); }
+  view.querySelectorAll('button.undo').forEach(b =>
+    b.addEventListener('click', () => restoreFromLog(+b.dataset.log)));
+}
+function showView(v){
+  state.view = v;
+  $('#tabList').classList.toggle('active', v === 'list');
+  $('#tabPayroll').classList.toggle('active', v === 'payroll');
+  $('#tabLog').classList.toggle('active', v === 'log');
+  $('#tableWrap').hidden = v !== 'list';
+  $('#countLine').hidden = v !== 'list';
+  $('#payrollView').hidden = v !== 'payroll';
+  $('#logView').hidden = v !== 'log';
+  if (v === 'payroll') renderPayroll();
+  if (v === 'log') renderLog();
+}
+
+/* ========= Excel 匯出 ========= */
+function exportExcel(){
+  const heads = state.headers.slice();
+  const aoa = [heads];
+  state.rows.forEach(r => aoa.push(heads.map(h => r[h] ?? '')));
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = heads.map(h => ({ wch: h === '專案名稱' ? 40 : (h === '備註' ? 50 : 12) }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '專案獎金');
+  const logHeads = ['時間','操作人','動作','案場','獎金總計(前)','獎金總計(後)','變更內容'];
+  const logAoa = [logHeads];
+  state.log.forEach(e => logAoa.push([
+    new Date(e.t).toLocaleString('zh-TW', { hour12: false }),
+    e.user_email, e.action, e.project || '', e.total_before ?? '', e.total_after ?? '', e.diff || '',
+  ]));
+  const wsLog = XLSX.utils.aoa_to_sheet(logAoa);
+  wsLog['!cols'] = [{wch:20},{wch:22},{wch:10},{wch:40},{wch:14},{wch:14},{wch:80}];
+  XLSX.utils.book_append_sheet(wb, wsLog, '操作紀錄');
+  const d = new Date();
+  const stamp = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
+  XLSX.writeFile(wb, `專案獎金-${stamp}.xlsx`);
+  logAction('匯出Excel', `${state.rows.length}筆案場＋${state.log.length}筆紀錄`, null, null);
+  setStatus(`已匯出 ${state.rows.length} 筆案場（含操作紀錄）`);
+}
+
+/* ========= 初始化 ========= */
+function init(){
+  const now = new Date();
+  $('#monthPicker').value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  buildPayDateOptions();
+
+  $('#pwForm').addEventListener('submit', doLogin);
+  $('#bootstrapForm').addEventListener('submit', doBootstrap);
+  $('#btnShowBootstrap').addEventListener('click', () => {
+    $('#bootEmail').value = $('#loginEmail').value;
+    showLoginStep('bootstrap');
+    $('#bootEmail').focus();
+  });
+  $('#btnBackLogin').addEventListener('click', () => showLoginStep('login'));
+  $('#btnBlockedLogout').addEventListener('click', async () => { await sb.auth.signOut(); showLoginStep('login'); });
+  $('#btnLogout').addEventListener('click', async () => {
+    if (!confirm('登出？')) return;
+    await sb.auth.signOut();
+    location.reload();
+  });
+  $('#btnUsers').addEventListener('click', () => { $('#adminMask').hidden = false; $('#adminErr').textContent=''; renderUsers(); });
+  $('#btnCloseAdmin').addEventListener('click', () => { $('#adminMask').hidden = true; });
+  $('#adminMask').addEventListener('click', ev => { if (ev.target === $('#adminMask')) $('#adminMask').hidden = true; });
+  $('#btnAddUser').addEventListener('click', createAccount);
+  $('#btnReload').addEventListener('click', loadAll);
+  $('#btnSeed').addEventListener('click', () => $('#seedFile').click());
+  $('#seedFile').addEventListener('change', ev => {
+    if (ev.target.files[0]) seedFromFile(ev.target.files[0]);
+    ev.target.value = '';
+  });
+
+  $('#btnNew').addEventListener('click', openModal);
+  $('#btnCloseModal').addEventListener('click', closeModal);
+  $('#btnCancelModal').addEventListener('click', closeModal);
+  $('#modalMask').addEventListener('click', ev => { if (ev.target === $('#modalMask')) closeModal(); });
+  document.addEventListener('keydown', ev => { if (ev.key === 'Escape' && !$('#modalMask').hidden) closeModal(); });
+  form.addEventListener('submit', saveProject);
+  form.addEventListener('input', updatePreview);
+  form.scheme.addEventListener('change', () => { schemePanels(); updatePreview(); });
+  $('#searchBox').addEventListener('input', renderTable);
+  $('#showClosed').addEventListener('change', renderTable);
+  $('#designerFilter').addEventListener('change', renderTable);
+  $('#monthPicker').addEventListener('change', () => {
+    buildPayDateOptions();
+    if (state.view === 'payroll') renderPayroll();
+  });
+  $('#tabList').addEventListener('click', () => showView('list'));
+  $('#tabPayroll').addEventListener('click', () => showView('payroll'));
+  $('#tabLog').addEventListener('click', () => showView('log'));
+  $('#btnExport').addEventListener('click', exportExcel);
+
+  sb.auth.onAuthStateChange(async (event, session) => {
+    if (session && !state.allowed){
+      await checkAllowedAndEnter(session);
+    } else if (!session){
+      state.allowed = false;
+      state.user = '';
+      $('#userChip').textContent = '👤 未登入';
+      showLoginStep('login');
+      $('#loginMask').hidden = false;
+    }
+  });
+  sb.auth.getSession().then(({ data: { session } }) => {
+    if (!session) showLoginStep('login');
+  });
+}
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
