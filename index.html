@@ -156,17 +156,19 @@ fieldset legend{font-size:13px;font-weight:700;color:var(--brand);padding:0 6px}
 #busy[hidden]{display:none}
 #seedBar{background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:10px 14px;
   margin-bottom:10px;font-size:13px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+#seedBar[hidden]{display:none}
 @media print{header .toolbar,#statusBar,.viewtabs,td.actions,th.actions{display:none}}
 </style>
 </head>
 <body>
 <header>
-  <h1>專案獎金算薪系統 <span class="sub">☁ 雲端版 c3 ・ 帳號密碼登入（可自助設定密碼）・ 粉紅=待發 藍=已發 ・ 月份N=N+1月5號發 ・ 多人共用</span></h1>
+  <h1>專案獎金算薪系統 <span class="sub">☁ 雲端版 c4 ・ 帳號密碼登入 ・ 年份篩選 ・ 粉紅=待發 藍=已發 ・ 月份N=N+1月5號發 ・ 多人共用</span></h1>
   <div class="toolbar">
     <label>目前月份 <input type="month" id="monthPicker"></label>
     <button class="primary" id="btnNew">➕ 新增專案</button>
     <input type="search" id="searchBox" placeholder="搜尋案場 / 設計師 / 助理…">
     <label style="color:#fff"><input type="checkbox" id="showClosed"> 顯示已結案</label>
+    <select id="yearFilter" title="依年份篩選"><option value="">全部年份</option></select>
     <select id="designerFilter" title="依人員篩選"><option value="">全部人員</option></select>
     <span style="flex:1"></span>
     <span id="userChip" style="color:#ffd966;font-weight:700">👤 未登入</span>
@@ -731,6 +733,14 @@ function refreshEmployeeList(){
   df.innerHTML = '<option value="">全部人員</option>';
   [...names].sort((a,b)=>a.localeCompare(b,'zh-Hant')).forEach(n => df.add(new Option(n, n)));
   df.value = keep || '';
+  // 年份篩選（依「月份」西元年）
+  const years = new Set();
+  state.rows.forEach(r => { const y = String(r['月份'] || '').slice(0, 4); if (/^\d{4}$/.test(y)) years.add(y); });
+  const yf = $('#yearFilter');
+  const keepY = yf.value;
+  yf.innerHTML = '<option value="">全部年份</option>';
+  [...years].sort().reverse().forEach(y => yf.add(new Option(y + ' 年', y)));
+  yf.value = keepY || '';
 }
 function displayHeaders(){
   const extras = EXTRA.filter(h => !h.endsWith('狀態'));
@@ -750,6 +760,8 @@ function rowMatchesFilters(r){
           || String(r['備註']||'').toLowerCase().includes(q))) return false;
   const person = $('#designerFilter').value;
   if (person && !(String(r['設計師']).includes(person) || String(r['助理']).includes(person))) return false;
+  const year = $('#yearFilter').value;
+  if (year && String(r['月份'] || '').slice(0, 4) !== year) return false;
   return true;
 }
 function sortKey(r, col){
@@ -1361,6 +1373,7 @@ function init(){
   $('#searchBox').addEventListener('input', renderTable);
   $('#showClosed').addEventListener('change', renderTable);
   $('#designerFilter').addEventListener('change', renderTable);
+  $('#yearFilter').addEventListener('change', renderTable);
   $('#monthPicker').addEventListener('change', () => {
     buildPayDateOptions();
     if (state.view === 'payroll') renderPayroll();
